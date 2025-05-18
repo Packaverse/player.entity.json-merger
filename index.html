@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Packaverse – player.entity.json merger</title>
+  <style>
+    body {
+      background-color: #000;
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 20px;
+      max-width: 700px;
+      margin: auto;
+    }
+
+    h1 {
+      font-size: 1.8em;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    h3 {
+      margin-top: 30px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 5px;
+    }
+
+    input[type="file"], button {
+      margin: 10px 0;
+      padding: 10px 14px;
+      font-size: 1em;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    input[type="file"] {
+      background-color: #fff;
+      color: #000;
+    }
+
+    button {
+      background-color: #fff;
+      color: #000;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: #ccc;
+    }
+
+    ul {
+      padding-left: 20px;
+      list-style-type: circle;
+    }
+
+    li {
+      margin-bottom: 5px;
+    }
+
+    pre {
+      background: #111;
+      padding: 10px;
+      white-space: pre-wrap;
+      border: 1px solid #333;
+      border-radius: 5px;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+
+    hr {
+      border-color: #444;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Packaverse – player.entity.json merger</h1>
+  <p>Upload and merge multiple Minecraft Bedrock player.entity.json files without conflicts. Handles comments automatically.</p>
+
+  <input type="file" id="fileInput" accept=".json" />
+  <button onclick="addFile()">Add File</button>
+
+  <h3>Uploaded Files</h3>
+  <ul id="fileList"></ul>
+
+  <button onclick="mergeAndDownload()">Merge & Download</button>
+
+  <h3>Log</h3>
+  <pre id="log"></pre>
+
+  <script>
+    let filesData = [];
+    let fileNames = [];
+
+    function stripComments(jsonText) {
+      return jsonText
+        .replace(/\/\/.*$/gm, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+    }
+
+    function smartMerge(target, source) {
+      for (const key in source) {
+        if (typeof source[key] === "object" && !Array.isArray(source[key]) && source[key] !== null) {
+          if (!target[key]) target[key] = {};
+          smartMerge(target[key], source[key]);
+        } else if (Array.isArray(source[key])) {
+          if (!target[key]) target[key] = [];
+          const existing = new Set(target[key].map(i => JSON.stringify(i)));
+          for (const item of source[key]) {
+            const str = JSON.stringify(item);
+            if (!existing.has(str)) {
+              target[key].push(item);
+              existing.add(str);
+            }
+          }
+        } else {
+          if (!(key in target)) {
+            target[key] = source[key];
+          }
+        }
+      }
+      return target;
+    }
+
+    async function addFile() {
+      const input = document.getElementById('fileInput');
+      const file = input.files[0];
+      const log = document.getElementById('log');
+      if (!file) {
+        log.textContent = "No file selected.";
+        return;
+      }
+
+      try {
+        const raw = await file.text();
+        const cleaned = stripComments(raw);
+        const json = JSON.parse(cleaned);
+        filesData.push(json);
+        fileNames.push(file.name);
+
+        const li = document.createElement("li");
+        li.textContent = file.name;
+        document.getElementById("fileList").appendChild(li);
+
+        log.textContent += `Added: ${file.name}\n`;
+        input.value = '';
+      } catch (e) {
+        log.textContent += `Failed to read ${file.name}: ${e.message}\n`;
+      }
+    }
+
+    function mergeAndDownload() {
+      const log = document.getElementById('log');
+      if (filesData.length < 2) {
+        log.textContent += "\nPlease add at least 2 files to merge.";
+        return;
+      }
+
+      let merged = {};
+      filesData.forEach(json => {
+        merged = smartMerge(merged, json);
+      });
+
+      const blob = new Blob([JSON.stringify(merged, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "merged_player.entity.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      log.textContent += "\nMerged file downloaded.";
+    }
+  </script>
+</body>
+</html>
